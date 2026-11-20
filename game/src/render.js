@@ -4,7 +4,7 @@
 // more than the block on screen. HUD, minimap, banners and the title / pause /
 // busted / story-complete screens are all drawn here from state.
 
-import { DISTRICTS, FONT, PALETTE, PLAYER, WORLD } from './config.js';
+import { DISTRICTS, DUSK, FONT, PALETTE, PLAYER, WORLD } from './config.js';
 import { INTRO_LINES } from './missions.js';
 
 export const SCREEN_TITLE = 0;
@@ -52,6 +52,7 @@ export function createRenderer(canvas) {
     drawBullets(state);
     drawParticles(state);
     if (state.marker) drawMarker(state);
+    if (state.dusk) drawDusk(state, camX, camY, s);
     ctx.restore();
 
     if (screen === SCREEN_PLAY || screen === SCREEN_PAUSED) drawHud(state);
@@ -153,7 +154,7 @@ export function createRenderer(canvas) {
       ctx.fillStyle = '#3f7a36';
       ctx.beginPath(); ctx.arc(t.x - t.r * 0.25, t.y - t.r * 0.25, t.r * 0.6, 0, Math.PI * 2); ctx.fill();
     }
-    ctx.fillStyle = '#3a3f46';
+    ctx.fillStyle = state.dusk ? '#ffd9a0' : '#3a3f46';
     for (const l of world.lamps) {
       if (!visible(state, l.x, l.y, 30)) continue;
       ctx.fillRect(l.x - 2, l.y - 2, 4, 4);
@@ -344,6 +345,30 @@ export function createRenderer(canvas) {
     }
   }
 
+  // Dusk: a violet wash over the whole view, then a warm pool of light around
+  // every street lamp in it. Each lamp's glow size and flicker phase were seeded
+  // into the world at generation time, so the lit streets are the same every run.
+  function drawDusk(state, camX, camY, s) {
+    const hw = viewW / s / 2 + 80;
+    const hh = viewH / s / 2 + 80;
+    ctx.fillStyle = DUSK.tint;
+    ctx.globalAlpha = DUSK.tintAlpha;
+    ctx.fillRect(camX - hw, camY - hh, hw * 2, hh * 2);
+    ctx.globalAlpha = 1;
+    for (const l of state.worldRef.lamps) {
+      if (!visible(state, l.x, l.y, DUSK.lampGlowRadius + 40)) continue;
+      const flicker = 1 + Math.sin(state.time * 7 + l.phase) * 0.05;
+      const r = DUSK.lampGlowRadius * l.glow * flicker;
+      const glow = ctx.createRadialGradient(l.x, l.y, 0, l.x, l.y, r);
+      glow.addColorStop(0, `rgba(${DUSK.lampGlowRgb}, 0.5)`);
+      glow.addColorStop(1, `rgba(${DUSK.lampGlowRgb}, 0)`);
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(l.x, l.y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
   function drawMarker(state) {
     const m = state.marker;
     const pulse = 1 + Math.sin(state.time * 4) * 0.12;
@@ -385,12 +410,19 @@ export function createRenderer(canvas) {
     ctx.fillStyle = PALETTE.muted;
     ctx.font = `700 13px ${FONT}`;
     ctx.fillText(state.worldRef.districtAt(p.x, p.y), viewW - 22, 64);
+    let rightY = 86;
+    if (state.dusk) {
+      ctx.fillStyle = PALETTE.gold;
+      ctx.font = `700 13px ${FONT}`;
+      ctx.fillText(`DUSK · JOBS PAY +${Math.round((DUSK.payoutBonus - 1) * 100)}%`, viewW - 22, rightY);
+      rightY += 22;
+    }
     if (state.marker) {
       const anchor = state.mode === 'car' && state.car ? state.car : p;
       const d = Math.round(Math.hypot(state.marker.x - anchor.x, state.marker.y - anchor.y));
       ctx.fillStyle = PALETTE.mission;
       ctx.font = `700 14px ${FONT}`;
-      ctx.fillText(`Objective ${d}m`, viewW - 22, 86);
+      ctx.fillText(`Objective ${d}m`, viewW - 22, rightY);
     }
     // Bottom-right: health, ammo, speed.
     ctx.fillStyle = 'rgba(8,10,14,0.62)';
@@ -413,7 +445,7 @@ export function createRenderer(canvas) {
       ctx.fillStyle = 'rgba(8,10,14,0.55)';
       ctx.font = `600 13.5px ${FONT}`;
       ctx.textAlign = 'center';
-      ctx.fillText('WASD move/drive · E enter/exit car · Mouse aim, click shoot · Space punch · Shift sprint · M next job · P pause', viewW / 2, viewH - 16);
+      ctx.fillText('WASD move/drive · E enter/exit car · Mouse aim, click shoot · Space punch · Shift sprint · M next job · L dusk · P pause', viewW / 2, viewH - 16);
     }
   }
 
@@ -589,7 +621,7 @@ export function createRenderer(canvas) {
     const lines = [
       'WASD / arrows — move & drive      E — enter / exit car (steal it)',
       'Mouse — aim · click — shoot      SPACE — punch      SHIFT — sprint',
-      'M — Tito\'s next job      $ fares — pick up & deliver      P / ESC — pause',
+      'M — Tito\'s next job      $ fares — pick up & deliver      L — dusk (jobs pay +25%)      P / ESC — pause',
       `Story: 6 jobs for Tito · Cash $${state.cash} · Jobs done ${state.stats.missionsDone}/6 · Fares ${state.stats.faresDone}`,
     ];
     lines.forEach((line, i) => ctx.fillText(line, viewW / 2, viewH * 0.62 + 42 + i * 23));

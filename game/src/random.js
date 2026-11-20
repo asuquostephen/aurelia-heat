@@ -23,3 +23,15 @@ export function range(random, min, max) {
 export function rangeInt(random, min, max) {
   return Math.floor(range(random, min, max + 1));
 }
+
+/** Pick from [value, weight] pairs, with odds proportional to the weights. */
+export function weightedPick(random, entries) {
+  let total = 0;
+  for (const [, weight] of entries) total += weight;
+  let roll = random() * total;
+  for (const [value, weight] of entries) {
+    roll -= weight;
+    if (roll <= 0) return value;
+  }
+  return entries[entries.length - 1][0];
+}

@@ -1,5 +1,5 @@
 // Keyboard and mouse input. Held keys are a set the simulation reads every step;
-// one-shot actions (interact, pause, confirm, punch, mission) are latched as bits and
+// one-shot actions (interact, pause, confirm, punch, mission, dusk) are latched as bits and
 // handed over once with takeActions(), so a press is never read twice or lost between
 // frames. The mouse position is kept in screen pixels; the game converts it to world
 // coordinates for aiming.
@@ -10,6 +10,7 @@ export const ACTION_CONFIRM = 4;
 export const ACTION_PUNCH = 8;
 export const ACTION_MISSION = 16;
 export const ACTION_SAVE = 32;
+export const ACTION_DUSK = 64;
 
 const ACTION_KEYS = {
   KeyE: ACTION_INTERACT,
@@ -20,6 +21,7 @@ const ACTION_KEYS = {
   Escape: ACTION_PAUSE,
   KeyS: 0, // S is a held movement key too; saving is Ctrl/Cmd+S-free: KeyK below.
   KeyK: ACTION_SAVE,
+  KeyL: ACTION_DUSK,
 };
 
 export function createInput(canvas) {

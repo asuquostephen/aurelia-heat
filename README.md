@@ -48,6 +48,12 @@ broke. Your old friend Tito Marchetti has work. Six jobs later, the city is your
 - **Procedural sound** — Web Audio synthesis only: shots, crashes, pickups, mission
   stingers, an engine note tied to your speed and a two-tone siren that swells as
   patrol cars close in. No audio files.
+- **Dusk mode** — press **L** and the light drops over Port Aurelia: a violet dusk
+  tint settles on the city, the street lamps throw warm pools of light, and
+  crickets chirp under the engine and sirens. The city pays for the dark — jobs
+  and taxi fares pay **25% more** while dusk is active (the bonus is itemised in
+  the reward text) — and police heat cools off faster in the low light. Press L
+  again to bring the light back.
 
 ## Controls
 
@@ -60,6 +66,7 @@ broke. Your old friend Tito Marchetti has work. Six jobs later, the city is your
 | E | Enter / exit a car (steal it) |
 | Shift | Sprint on foot |
 | M | Start Tito's next job |
+| L | Toggle dusk mode (+25% job and fare pay, faster heat decay) |
 | K | Save progress |
 | P / Esc | Pause |
 
@@ -78,7 +85,7 @@ broke. Your old friend Tito Marchetti has work. Six jobs later, the city is your
   wanted, missions, fares, pickups, save data), `missions.js` (the six-job story,
   as data), `render.js` (canvas renderer, HUD, minimap, screens), `input.js`
   (keyboard/mouse), `audio.js` (synthesised sound), `shots.js` (the staged
-  screenshot scenes behind `?shot=start|play|end`), `main.js` (boot and the loop).
+  screenshot scenes behind `?shot=start|play|end|dusk`), `main.js` (boot and the loop).
 - `screenshots/` — three screens of the game running (`shots.json` lists the
   `?shot=` URLs they were taken from).
 - `vendor/makefun-game.ts` — make.fun's dossier library, vendored byte for byte.

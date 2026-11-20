@@ -6,7 +6,21 @@
 // 'collect'). The simulation in game.js interprets the stages; this file is only
 // the writing and the numbers, so the story can be read top to bottom.
 
+import { DUSK } from './config.js';
+
 export const CONTACT = 'TITO';
+
+/**
+ * The pay for a job or a fare. While dusk mode is active the amount is multiplied
+ * by DUSK.payoutBonus; the returned bonus says how much of the total the dusk
+ * premium accounts for, so the game can show it in the reward text.
+ */
+export function payWithDusk(base, dusk) {
+  const plain = Math.round(base);
+  if (!dusk) return { amount: plain, bonus: 0 };
+  const amount = Math.round(base * DUSK.payoutBonus);
+  return { amount, bonus: amount - plain };
+}
 
 export const INTRO_LINES = [
   'Port Aurelia. Jules Rook has been gone six years.',

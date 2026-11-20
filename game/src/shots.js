@@ -1,4 +1,4 @@
-// The screenshot scenes behind ?shot=start|play|end (with &seed=N). Each one stages
+// The screenshot scenes behind ?shot=start|play|end|dusk (with &seed=N). Each one stages
 // the real game — the same world, vehicles and rules — so the frame is what playing
 // actually looks like, and the same seed always gives the same frame. main.js paints
 // the staged scene twice and sets window.__shotReady.
@@ -69,6 +69,20 @@ export function stageShot(name, game, world) {
     state.camera.x = a.x;
     state.camera.y = a.y - 120;
     return { screen: SCREEN_OVER };
+  }
+  if (name === 'dusk') {
+    // Dusk mode over Downtown: Jules on foot at a lit junction, the tint down and
+    // the street lamps glowing, so the frame shows what the L key does.
+    const d = world.places.downtown;
+    state.dusk = true;
+    state.player.x = d.x + 30;
+    state.player.y = d.y + 46;
+    state.camera.x = state.player.x;
+    state.camera.y = state.player.y;
+    settle(game, 0.8);
+    state.camera.x = state.player.x;
+    state.camera.y = state.player.y;
+    return { screen: SCREEN_PLAY };
   }
   // start: the title over Dockside, the garage in view.
   const g = world.places.garage;

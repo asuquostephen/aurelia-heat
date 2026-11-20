@@ -5,7 +5,7 @@
 // this circle hit a building, which road centre is nearest, and where can things spawn.
 
 import { DISTRICTS, ROOF_COLOURS, WORLD } from './config.js';
-import { pick, range, rangeInt } from './random.js';
+import { pick, range, rangeInt, weightedPick } from './random.js';
 
 export function createWorld(random) {
   const size = WORLD.size;
@@ -65,12 +65,22 @@ export function createWorld(random) {
     }
   }
 
-  // Street lamps along the avenues.
+  // Street lamps along the avenues. Each lamp also carries its dusk glow: a seeded
+  // size class (weightedPick favours the standard pool of light) and a flicker phase,
+  // so the renderer can light the streets at dusk with no runtime randomness.
   for (const c of centres) {
     for (let v = 90; v < size; v += 270) {
-      lamps.push({ x: c + roadHalf + 8, y: v });
-      lamps.push({ x: v, y: c + roadHalf + 8 });
+      lamps.push(makeLamp(c + roadHalf + 8, v, random));
+      lamps.push(makeLamp(v, c + roadHalf + 8, random));
     }
+  }
+
+  function makeLamp(x, y, rng) {
+    return {
+      x, y,
+      glow: weightedPick(rng, [[0.8, 1], [1, 3], [1.3, 1]]),
+      phase: range(rng, 0, Math.PI * 2),
+    };
   }
 
   function makeBuilding(x, y, w, h, rng) {

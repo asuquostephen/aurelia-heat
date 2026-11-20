@@ -1,7 +1,8 @@
 // Procedural sound with the Web Audio API: every effect is synthesised, so the game
 // needs no audio files and stays silent until the player's first key or click (the
 // browser's autoplay rule). One tiny engine hum follows the player's car speed, and
-// a two-tone siren sounds while police are close and the player is wanted.
+// a two-tone siren sounds while police are close and the player is wanted. While
+// dusk mode is on, a quiet cricket bed chirps underneath everything.
 
 export function createAudio() {
   let ctx = null;
@@ -11,6 +12,8 @@ export function createAudio() {
   let sirenOsc = null;
   let sirenGain = null;
   let sirenPhase = 0;
+  let duskOn = false;
+  let duskTimer = 0;
 
   function ensure() {
     if (ctx !== null) {
@@ -73,8 +76,23 @@ export function createAudio() {
     source.start();
   }
 
+  /** One cricket: three short, very quiet high pulses. Synthesised, like everything else. */
+  function chirp() {
+    if (!ensure()) return;
+    const base = 4100 + Math.random() * 400;
+    for (let i = 0; i < 3; i += 1) {
+      setTimeout(() => blip(base, base - 250, 0.035, 'sine', 0.026), i * 72);
+    }
+  }
+
   return {
     unlock() { ensure(); },
+    /** Dusk ambience on/off, driven by the game's dusk toggle. Chirps already
+     *  scheduled are one-shots under a quarter-second, so switching off stops clean. */
+    setDusk(on) {
+      duskOn = on;
+      if (on) duskTimer = 0.3;
+    },
     shot() { noise(0.09, 0.5, 2600); blip(220, 60, 0.08, 'square', 0.18); },
     punch() { noise(0.07, 0.35, 700); },
     hit() { blip(160, 70, 0.12, 'square', 0.25); },
@@ -95,6 +113,14 @@ export function createAudio() {
       const tone = Math.sin(sirenPhase * Math.PI) > 0 ? 740 : 988;
       sirenOsc.frequency.setTargetAtTime(tone, t, 0.03);
       sirenGain.gain.setTargetAtTime(siren01 * 0.045, t, 0.1);
+      // Dusk bed: a cricket chirps every second or two while dusk mode is on.
+      if (duskOn) {
+        duskTimer -= dt;
+        if (duskTimer <= 0) {
+          duskTimer = 0.9 + Math.random() * 1.6;
+          chirp();
+        }
+      }
     },
   };
 }

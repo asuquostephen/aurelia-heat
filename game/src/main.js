@@ -4,7 +4,7 @@
 // story-complete screen; busted and wasted are overlays inside play. Progress is
 // kept in localStorage between visits.
 //
-// ?seed=N fixes the city. ?shot=start|play|end (with &seed=N) stages that scene
+// ?seed=N fixes the city. ?shot=start|play|end|dusk (with &seed=N) stages that scene
 // instead of running the loop, paints it twice and sets window.__shotReady.
 
 import { SAVE_KEY, STEP } from './config.js';
@@ -134,6 +134,8 @@ function runGame() {
         if (ev === 'wasted') announce('Wasted. You wake up at Aurelia General.');
         if (ev === 'busted') announce('Busted. Fines paid.');
         if (ev === 'hit') announce('Hit.');
+        if (ev === 'dusk-on') announce('Dusk mode on. Jobs and fares pay a bonus; heat cools faster.');
+        if (ev === 'dusk-off') announce('Dusk mode off.');
       }
     } else {
       accumulator = 0;

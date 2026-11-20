@@ -56,6 +56,22 @@ export const WEAPON = {
   startAmmo: 48,
 };
 
+export const DUSK = {
+  /** Overlay tint washed over the scene while dusk mode is on (L key). */
+  tint: '#241a4d',
+  tintAlpha: 0.36,
+  /** Radius of the pool of light a standard street lamp throws at dusk; each lamp
+   *  stores a seeded multiplier on this in the world. */
+  lampGlowRadius: 56,
+  /** Lamp light colour, as an "r, g, b" triple for rgba() strings in the renderer. */
+  lampGlowRgb: '255, 190, 100',
+  /** Mission rewards and taxi fares are multiplied by this while dusk is active:
+   *  the city pays extra after dark. */
+  payoutBonus: 1.25,
+  /** Heat decays this much faster at dusk: low light, fewer witnesses. */
+  heatDecayFactor: 1.5,
+};
+
 export const SAVE_KEY = 'aurelia-heat.save.v1';
 
 export const PALETTE = {

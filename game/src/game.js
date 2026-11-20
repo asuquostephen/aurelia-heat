@@ -5,13 +5,16 @@
 // object (main.js keeps it in localStorage). update() advances one fixed step and
 // reports nothing — main.js reads state for sound cues from the event queue.
 
-import { CAR, PALETTE, PLAYER, WANTED, WEAPON, WORLD } from './config.js';
-import { ACTION_INTERACT, ACTION_MISSION, ACTION_PUNCH } from './input.js';
-import { FARE_PAY, MISSIONS, SIDE_TEXT } from './missions.js';
+import { CAR, DUSK, PALETTE, PLAYER, WANTED, WEAPON, WORLD } from './config.js';
+import { ACTION_DUSK, ACTION_INTERACT, ACTION_MISSION, ACTION_PUNCH } from './input.js';
+import { FARE_PAY, MISSIONS, SIDE_TEXT, payWithDusk } from './missions.js';
 import { pick, range, rangeInt } from './random.js';
 import { CAR_COLOURS } from './config.js';
 
 let nextId = 1;
+
+/** The dusk payout premium as a whole percent, for player-facing text. */
+const DUSK_BONUS_PCT = Math.round((DUSK.payoutBonus - 1) * 100);
 
 export function createGame(random, world, audio) {
   const state = {
@@ -26,6 +29,7 @@ export function createGame(random, world, audio) {
     particles: [],
     pickups: [],
     cash: 120,
+    dusk: false,
     respect: 0,
     heat: 0,
     stars: 0,
@@ -63,6 +67,18 @@ export function createGame(random, world, audio) {
       const s = range(random, speed * 0.3, speed);
       state.particles.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: range(random, 0.25, 0.6), maxLife: 0.6, colour, size: range(random, 2, 4.5) });
     }
+  }
+
+  // ---------- dusk mode ----------
+  // The L key flips the city into dusk: the renderer tints the scene and lights the
+  // lamps, jobs and fares pay the dusk premium, and heat cools faster in low light.
+  function toggleDusk() {
+    state.dusk = !state.dusk;
+    audio.setDusk(state.dusk);
+    state.events.push(state.dusk ? 'dusk-on' : 'dusk-off');
+    toast(state.dusk
+      ? `Dusk settles over Port Aurelia — jobs and fares pay +${DUSK_BONUS_PCT}%, and heat cools faster.`
+      : 'The light comes back — standard pay, standard heat.', 3.6);
   }
 
   function addCrime(kind) {
@@ -194,13 +210,14 @@ export function createGame(random, world, audio) {
   }
   function completeMission() {
     const def = state.mission.def;
-    state.cash += def.reward;
-    state.stats.earned += def.reward;
+    const pay = payWithDusk(def.reward, state.dusk);
+    state.cash += pay.amount;
+    state.stats.earned += pay.amount;
     state.stats.missionsDone += 1;
     state.respect += 1;
     state.missionIndex += 1;
     state.mission = null;
-    banner('MISSION COMPLETE', `${def.outro}  (+$${def.reward})`, 7);
+    banner('MISSION COMPLETE', `${def.outro}  (+$${pay.amount}${pay.bonus > 0 ? `, incl. $${pay.bonus} dusk bonus` : ''})`, 7);
     audio.cash();
     if (state.missionIndex >= MISSIONS.length) {
       state.storyDone = true;
@@ -291,7 +308,7 @@ export function createGame(random, world, audio) {
   }
 
   return {
-    state, toast, banner, startNextMission, saveData, applySave,
+    state, toast, banner, startNextMission, saveData, applySave, toggleDusk,
     get objective() { return state.objective; },
     update,
   };
@@ -315,6 +332,8 @@ export function createGame(random, world, audio) {
       updateFx(dt);
       return;
     }
+
+    if (actions & ACTION_DUSK) toggleDusk();
 
     handlePlayer(dt, input, actions);
     handleTraffic(dt);
@@ -842,7 +861,9 @@ export function createGame(random, world, audio) {
     if (seen) state.unseenFor = 0;
     else state.unseenFor += dt;
     if (state.unseenFor > WANTED.hideGrace && state.heat > 0) {
-      state.heat = Math.max(0, state.heat - WANTED.decayPerSecond * dt * (state.unseenFor > 9 ? 2.2 : 1));
+      // At dusk the low light works for the player: heat cools off faster.
+      const duskFactor = state.dusk ? DUSK.heatDecayFactor : 1;
+      state.heat = Math.max(0, state.heat - WANTED.decayPerSecond * dt * (state.unseenFor > 9 ? 2.2 : 1) * duskFactor);
     }
     state.stars = Math.min(WANTED.maxStars, Math.ceil(state.heat / WANTED.perStar));
     if (state.heat <= 0) state.stars = 0;
@@ -928,16 +949,16 @@ export function createGame(random, world, audio) {
       return;
     }
     if (Math.hypot(fare.dest.x - state.car.x, fare.dest.y - state.car.y) < 74 && Math.abs(state.car.speed) < 30) {
-      const pay = Math.round(FARE_PAY.base + fare.startDist * FARE_PAY.perUnit);
-      state.cash += pay;
-      state.stats.earned += pay;
+      const pay = payWithDusk(FARE_PAY.base + fare.startDist * FARE_PAY.perUnit, state.dusk);
+      state.cash += pay.amount;
+      state.stats.earned += pay.amount;
       state.stats.faresDone += 1;
       if (fare.ped) {
         fare.ped.state = 'walk';
         fare.ped.x = state.car.x + 30;
         fare.ped.y = state.car.y + 16;
       }
-      toast(`Fare paid $${pay}.`, 3);
+      toast(pay.bonus > 0 ? `Fare paid $${pay.amount} (incl. $${pay.bonus} dusk bonus).` : `Fare paid $${pay.amount}.`, 3);
       audio.cash();
       state.fare = null;
       state.fareTimer = range(random, 14, 26);
