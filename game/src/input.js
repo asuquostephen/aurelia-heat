@@ -1,80 +1,53 @@
-// Keyboard and mouse input. Held keys are a set the simulation reads every step;
-// one-shot actions (interact, pause, confirm, punch, mission, dusk) are latched as bits and
-// handed over once with takeActions(), so a press is never read twice or lost between
-// frames. The mouse position is kept in screen pixels; the game converts it to world
-// coordinates for aiming.
+// Keyboard and pointer input. Held keys give a steering direction; one-shot presses (start or
+// restart, pause) are queued as bit flags and taken once by the loop, so a press between two
+// frames is never lost and never counted twice.
 
-export const ACTION_INTERACT = 1;
+export const ACTION_CONFIRM = 1;
 export const ACTION_PAUSE = 2;
-export const ACTION_CONFIRM = 4;
-export const ACTION_PUNCH = 8;
-export const ACTION_MISSION = 16;
-export const ACTION_SAVE = 32;
-export const ACTION_DUSK = 64;
 
-const ACTION_KEYS = {
-  KeyE: ACTION_INTERACT,
-  Enter: ACTION_CONFIRM,
-  Space: ACTION_PUNCH,
-  KeyM: ACTION_MISSION,
-  KeyP: ACTION_PAUSE,
-  Escape: ACTION_PAUSE,
-  KeyS: 0, // S is a held movement key too; saving is Ctrl/Cmd+S-free: KeyK below.
-  KeyK: ACTION_SAVE,
-  KeyL: ACTION_DUSK,
-};
+const LEFT = new Set(['ArrowLeft', 'KeyA']);
+const RIGHT = new Set(['ArrowRight', 'KeyD']);
+const CONFIRM = new Set(['Space', 'Enter']);
+const PAUSE = new Set(['KeyP', 'Escape']);
 
-export function createInput(canvas) {
-  const held = new Set();
-  const mouse = { x: 0, y: 0, down: false };
-  let latched = 0;
+export function createInput(target) {
+  let left = false;
+  let right = false;
+  let actions = 0;
 
   window.addEventListener('keydown', (event) => {
-    if (event.repeat) return;
-    held.add(event.code);
-    const action = ACTION_KEYS[event.code];
-    if (action) {
-      latched |= action;
-      event.preventDefault();
-    }
-    if (event.code.startsWith('Arrow')) event.preventDefault();
+    if (LEFT.has(event.code)) left = true;
+    else if (RIGHT.has(event.code)) right = true;
+    else if (CONFIRM.has(event.code)) {
+      if (!event.repeat) actions |= ACTION_CONFIRM;
+    } else if (PAUSE.has(event.code)) {
+      if (!event.repeat) actions |= ACTION_PAUSE;
+    } else return;
+    event.preventDefault();
   });
-  window.addEventListener('keyup', (event) => held.delete(event.code));
-  window.addEventListener('blur', () => held.clear());
-
-  canvas.addEventListener('mousemove', (event) => {
-    const rect = canvas.getBoundingClientRect();
-    mouse.x = event.clientX - rect.left;
-    mouse.y = event.clientY - rect.top;
+  window.addEventListener('keyup', (event) => {
+    if (LEFT.has(event.code)) left = false;
+    else if (RIGHT.has(event.code)) right = false;
   });
-  canvas.addEventListener('mousedown', (event) => {
-    if (event.button === 0) {
-      mouse.down = true;
-      latched |= ACTION_CONFIRM;
-    }
+  // A key released while the tab is hidden never sends keyup: let go of everything on blur.
+  window.addEventListener('blur', () => {
+    left = false;
+    right = false;
   });
-  window.addEventListener('mouseup', (event) => {
-    if (event.button === 0) mouse.down = false;
+  target.addEventListener('pointerdown', () => {
+    actions |= ACTION_CONFIRM;
   });
 
   return {
-    mouse,
-    isDown(code) { return held.has(code); },
-    /** Movement axes: x is -1 left / +1 right, y is -1 up / +1 down (screen sense). */
-    moveAxis() {
-      let x = 0;
-      let y = 0;
-      if (held.has('KeyA') || held.has('ArrowLeft')) x -= 1;
-      if (held.has('KeyD') || held.has('ArrowRight')) x += 1;
-      if (held.has('KeyW') || held.has('ArrowUp')) y -= 1;
-      if (held.has('KeyS') || held.has('ArrowDown')) y += 1;
-      return { x, y };
+    /** -1 for left, 1 for right, 0 for neither or both. */
+    direction() {
+      return (right ? 1 : 0) - (left ? 1 : 0);
     },
-    sprint() { return held.has('ShiftLeft') || held.has('ShiftRight'); },
+    /** The one-shot presses since the last call, as ACTION_* flags. */
     takeActions() {
-      const actions = latched;
-      latched = 0;
-      return actions;
+      const taken = actions;
+      actions = 0;
+      return taken;
     },
   };
 }

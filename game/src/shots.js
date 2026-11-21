@@ -1,97 +1,79 @@
-// The screenshot scenes behind ?shot=start|play|end|dusk (with &seed=N). Each one stages
-// the real game — the same world, vehicles and rules — so the frame is what playing
-// actually looks like, and the same seed always gives the same frame. main.js paints
-// the staged scene twice and sets window.__shotReady.
-
-import { STEP } from './config.js';
+// The screenshot scenes behind ?shot=start|play|end. Each one plays the real rules forward from a
+// fresh world for a fixed number of steps, steered by a simple autopilot (look ahead each way the
+// paddle could move, keep clear of blocks, chase the lowest coin when that is safe), so the frame
+// is what a short game really looks like and the same seed always gives the same frame.
+import { FIELD, PLAYER, STEP } from './config.js';
+import { EVENT_OVER, KIND_BLOCK } from './world.js';
 import { SCREEN_OVER, SCREEN_PLAY, SCREEN_TITLE } from './render.js';
 
-const IDLE_INPUT = {
-  mouse: { x: 0, y: 0, down: false },
-  moveAxis() { return { x: 0, y: 0 }; },
-  sprint() { return false; },
-};
+const START_SECONDS = 5;
+const PLAY_SECONDS = 26;
+const END_LIMIT_SECONDS = 600;
+/**
+ * How far ahead, in seconds, the autopilot checks each way it could move: the play scene's pilot
+ * looks well ahead and keeps all its lives; the end scene's looks only a moment ahead, so it is
+ * caught out once the blocks speed up, as a hurried player is.
+ */
+const HORIZON_PLAY = 0.7;
+const HORIZON_END = 0.25;
+const SAMPLE = 1 / 30;
+const DIRECTIONS = [0, -1, 1];
+/** Extra room, each side, it keeps between the paddle and a block. */
+const MARGIN = 10;
 
-let shotId = 9000;
-
-function vehicle(x, y, angle, cls, colour, kind) {
-  shotId += 1;
-  return {
-    id: shotId, x, y, angle, speed: 0, cls, colour, kind,
-    health: 100, driver: kind === 'parked' ? null : 'ai',
-    axis: 'v', centre: 2700, dir: 1, turnCd: 2, stuck: 0, siren: 1, targetCar: false,
-  };
+/** Seconds until moving in `direction` (-1, 0, 1) runs the paddle into a block; Infinity when it never does. */
+function timeToHit(state, direction, horizon) {
+  const player = state.player;
+  for (let t = SAMPLE; t <= horizon; t += SAMPLE) {
+    const x = Math.min(FIELD.width - player.width, Math.max(0, player.x + direction * PLAYER.speed * t));
+    for (let index = 0; index < state.items.length; index += 1) {
+      const item = state.items[index];
+      if (!item.active || item.kind !== KIND_BLOCK) continue;
+      const y = item.y + item.speed * t;
+      if (y + item.height > player.y && y < player.y + player.height && item.x < x + player.width + MARGIN && item.x + item.width > x - MARGIN) return t;
+    }
+  }
+  return Infinity;
 }
 
-function settle(game, seconds) {
-  const steps = Math.floor(seconds / STEP);
-  for (let i = 0; i < steps; i += 1) game.update(STEP, IDLE_INPUT, 0);
+/** Of the safe ways to move, the one toward the lowest coin (or the centre); else the one that is hit last. */
+function autopilot(state, horizon) {
+  const player = state.player;
+  let coin = null;
+  for (let index = 0; index < state.items.length; index += 1) {
+    const item = state.items[index];
+    if (item.active && item.kind !== KIND_BLOCK && (coin === null || item.y > coin.y)) coin = item;
+  }
+  const target = coin === null ? FIELD.width / 2 : coin.x + coin.width / 2;
+  const centre = player.x + player.width / 2;
+  const wanted = target > centre + 8 ? 1 : target < centre - 8 ? -1 : 0;
+  let best = wanted;
+  let bestTime = timeToHit(state, wanted, horizon);
+  for (let index = 0; index < DIRECTIONS.length && bestTime !== Infinity; index += 1) {
+    const time = timeToHit(state, DIRECTIONS[index], horizon);
+    if (time > bestTime) {
+      bestTime = time;
+      best = DIRECTIONS[index];
+    }
+  }
+  return best;
 }
 
-export function stageShot(name, game, world) {
-  const state = game.state;
-  if (name === 'play') {
-    // Mid-chase downtown: Jules in a sport coupe, traffic around, three stars,
-    // two patrol cars closing in, Tito's first job on the objective line.
-    const d = world.places.downtown;
-    game.startNextMission();
-    const car = vehicle(d.x - 40, d.y + 10, 0.2, 'sport', '#c94f42', 'parked');
-    car.driver = 'player';
-    state.vehicles.push(car);
-    state.car = car;
-    state.mode = 'car';
-    state.player.x = car.x;
-    state.player.y = car.y;
-    state.vehicles.push(vehicle(d.x - 260, d.y - 120, 0.5, 'cop', '#e8ecf2', 'cop'));
-    state.vehicles.push(vehicle(d.x - 420, d.y + 90, -0.2, 'cop', '#e8ecf2', 'cop'));
-    state.vehicles.push(vehicle(d.x + 240, d.y - 40, Math.PI, 'sedan', '#3f7fe0', 'traffic'));
-    state.vehicles.push(vehicle(d.x + 90, d.y + 190, -Math.PI / 2, 'taxi', '#e0a83c', 'traffic'));
-    state.heat = 76; // three stars
-    state.camera.x = car.x;
-    state.camera.y = car.y;
-    settle(game, 1.2);
-    state.camera.x = car.x;
-    state.camera.y = car.y;
-    return { screen: SCREEN_PLAY };
+/**
+ * Set `world` to the named scene (start, play or end; any other name is start) and return the
+ * screen to draw over it and the best score to show.
+ */
+export function stageShot(name, world) {
+  world.reset();
+  if (name !== 'play' && name !== 'end') {
+    for (let index = 0; index < START_SECONDS / STEP; index += 1) world.step(STEP, 0, true);
+    return { screen: SCREEN_TITLE, best: 0 };
   }
-  if (name === 'end') {
-    // The story is done: the completion screen over the airfield gate at the coast.
-    const a = world.places.airport;
-    state.storyDone = true;
-    state.missionIndex = 6;
-    state.cash = 4870;
-    state.stats = { earned: 4650, carsStolen: 7, faresDone: 5, missionsDone: 6 };
-    state.player.x = a.x;
-    state.player.y = a.y;
-    state.camera.x = a.x;
-    state.camera.y = a.y - 120;
-    settle(game, 0.4);
-    state.camera.x = a.x;
-    state.camera.y = a.y - 120;
-    return { screen: SCREEN_OVER };
+  const limit = name === 'end' ? END_LIMIT_SECONDS : PLAY_SECONDS;
+  const horizon = name === 'end' ? HORIZON_END : HORIZON_PLAY;
+  for (let index = 0; index < limit / STEP; index += 1) {
+    if (world.step(STEP, autopilot(world.state, horizon), false) & EVENT_OVER) break;
   }
-  if (name === 'dusk') {
-    // Dusk mode over Downtown: Jules on foot at a lit junction, the tint down and
-    // the street lamps glowing, so the frame shows what the L key does.
-    const d = world.places.downtown;
-    state.dusk = true;
-    state.player.x = d.x + 30;
-    state.player.y = d.y + 46;
-    state.camera.x = state.player.x;
-    state.camera.y = state.player.y;
-    settle(game, 0.8);
-    state.camera.x = state.player.x;
-    state.camera.y = state.player.y;
-    return { screen: SCREEN_PLAY };
-  }
-  // start: the title over Dockside, the garage in view.
-  const g = world.places.garage;
-  state.player.x = g.x + 30;
-  state.player.y = g.y + 60;
-  state.camera.x = g.x + 60;
-  state.camera.y = g.y + 40;
-  settle(game, 1.5);
-  state.camera.x = g.x + 60;
-  state.camera.y = g.y + 40;
-  return { screen: SCREEN_TITLE };
+  const over = world.state.lives === 0;
+  return { screen: over ? SCREEN_OVER : SCREEN_PLAY, best: world.state.score };
 }
