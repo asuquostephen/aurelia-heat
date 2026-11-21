@@ -1,79 +1,99 @@
-// The screenshot scenes behind ?shot=start|play|end. Each one plays the real rules forward from a
-// fresh world for a fixed number of steps, steered by a simple autopilot (look ahead each way the
-// paddle could move, keep clear of blocks, chase the lowest coin when that is safe), so the frame
-// is what a short game really looks like and the same seed always gives the same frame.
-import { FIELD, PLAYER, STEP } from './config.js';
-import { EVENT_OVER, KIND_BLOCK } from './world.js';
-import { SCREEN_OVER, SCREEN_PLAY, SCREEN_TITLE } from './render.js';
+// Aurelia Heat — deterministic screenshot staging.
+// The screenshot harness loads the game with ?shot=start|play|end&seed=N.
+// Each scene is built from the same seed with fixed positions, so a capture
+// is reproducible: title screen, a mid-chase downtown moment at three stars
+// with HUD, minimap and banner visible, and the story-complete screen.
+// When staging finishes, window.__shotReady is set so the harness can wait
+// for a fully drawn frame instead of guessing with sleeps alone.
 
-const START_SECONDS = 5;
-const PLAY_SECONDS = 26;
-const END_LIMIT_SECONDS = 600;
-/**
- * How far ahead, in seconds, the autopilot checks each way it could move: the play scene's pilot
- * looks well ahead and keeps all its lives; the end scene's looks only a moment ahead, so it is
- * caught out once the blocks speed up, as a hurried player is.
- */
-const HORIZON_PLAY = 0.7;
-const HORIZON_END = 0.25;
-const SAMPLE = 1 / 30;
-const DIRECTIONS = [0, -1, 1];
-/** Extra room, each side, it keeps between the paddle and a block. */
-const MARGIN = 10;
+import { createGame, startNextMission, setBanner, playerPos } from './game.js';
+import { placeById } from './world.js';
 
-/** Seconds until moving in `direction` (-1, 0, 1) runs the paddle into a block; Infinity when it never does. */
-function timeToHit(state, direction, horizon) {
-  const player = state.player;
-  for (let t = SAMPLE; t <= horizon; t += SAMPLE) {
-    const x = Math.min(FIELD.width - player.width, Math.max(0, player.x + direction * PLAYER.speed * t));
-    for (let index = 0; index < state.items.length; index += 1) {
-      const item = state.items[index];
-      if (!item.active || item.kind !== KIND_BLOCK) continue;
-      const y = item.y + item.speed * t;
-      if (y + item.height > player.y && y < player.y + player.height && item.x < x + player.width + MARGIN && item.x + item.width > x - MARGIN) return t;
-    }
-  }
-  return Infinity;
+export function parseShotRequest(search) {
+  const params = new URLSearchParams(search || '');
+  const shot = params.get('shot');
+  const seedRaw = params.get('seed');
+  const seed = seedRaw === null ? 1 : Number(seedRaw);
+  return {
+    shot: shot === 'start' || shot === 'play' || shot === 'end' ? shot : null,
+    seed: Number.isFinite(seed) ? seed : 1,
+  };
 }
 
-/** Of the safe ways to move, the one toward the lowest coin (or the centre); else the one that is hit last. */
-function autopilot(state, horizon) {
-  const player = state.player;
-  let coin = null;
-  for (let index = 0; index < state.items.length; index += 1) {
-    const item = state.items[index];
-    if (item.active && item.kind !== KIND_BLOCK && (coin === null || item.y > coin.y)) coin = item;
+export function stageShot(game, shot) {
+  if (shot === 'start') {
+    game.mode = 'title';
+    game.time = 3.2;
+    return game;
   }
-  const target = coin === null ? FIELD.width / 2 : coin.x + coin.width / 2;
-  const centre = player.x + player.width / 2;
-  const wanted = target > centre + 8 ? 1 : target < centre - 8 ? -1 : 0;
-  let best = wanted;
-  let bestTime = timeToHit(state, wanted, horizon);
-  for (let index = 0; index < DIRECTIONS.length && bestTime !== Infinity; index += 1) {
-    const time = timeToHit(state, DIRECTIONS[index], horizon);
-    if (time > bestTime) {
-      bestTime = time;
-      best = DIRECTIONS[index];
+  if (shot === 'end') {
+    game.storyComplete = true;
+    game.mode = 'storycomplete';
+    game.player.cash = 5120;
+    game.stats.missionsDone = 6;
+    game.stats.faresDone = 4;
+    game.stats.carsStolen = 7;
+    game.time = 2;
+    return game;
+  }
+  if (shot === 'play') {
+    game.mode = 'playing';
+    const tower = placeById(game.world, 'tower');
+    // Put the player in a stolen coupe in Downtown Aurelia, mid-chase.
+    const coupe = game.cars.find((c) => c.classId === 'coupe') || game.cars[0];
+    coupe.x = tower.x + 130;
+    coupe.y = tower.y + 190;
+    coupe.heading = 0.35;
+    coupe.speed = 240;
+    coupe.parked = false;
+    coupe.driver = 'player';
+    coupe.hull = coupe.hullMax * 0.62;
+    coupe.smoke = 0.38;
+    game.player.inCar = coupe;
+    game.player.x = coupe.x;
+    game.player.y = coupe.y;
+    game.player.cash = 1840;
+    game.player.ammo = 31;
+    game.player.health = 72;
+    game.heat = 260; // three stars
+    game.dusk = false;
+    // Two patrol cars closing in behind, one crossing ahead.
+    game.police = [];
+    const { spawnShotPolice } = { spawnShotPolice: null };
+    void spawnShotPolice;
+    // Build patrol cars from the traffic pool shape via direct objects that
+    // match the car record the renderer and sim already understand.
+    const offsets = [[-190, 90, 0.2], [-260, -70, 0.5], [210, -120, 2.8]];
+    let pid = 9000;
+    for (const [ox, oy, heading] of offsets) {
+      game.police.push({
+        id: pid++, x: coupe.x + ox, y: coupe.y + oy, heading,
+        speed: 210, classId: 'patrol', className: 'Aurelia Patrol Interceptor',
+        topSpeed: 470, accel: 330, grip: 3.0, hullMax: 160, hull: 160,
+        color: '#eef1f5', parked: false, isPolice: true, driver: 'police',
+        marked: false, turnCooldown: 0, smoke: 0,
+      });
     }
+    startNextMission(game);
+    setBanner(game, 'Marlo: "Three stars, kid — lose them!"', 30);
+    game.dialogue = null;
+    game.banner = 'WANTED — patrols closing in on Downtown Aurelia';
+    game.bannerTimer = 30;
+    game.time = 5;
+    void playerPos(game);
+    return game;
   }
-  return best;
+  return game;
 }
 
-/**
- * Set `world` to the named scene (start, play or end; any other name is start) and return the
- * screen to draw over it and the best score to show.
- */
-export function stageShot(name, world) {
-  world.reset();
-  if (name !== 'play' && name !== 'end') {
-    for (let index = 0; index < START_SECONDS / STEP; index += 1) world.step(STEP, 0, true);
-    return { screen: SCREEN_TITLE, best: 0 };
-  }
-  const limit = name === 'end' ? END_LIMIT_SECONDS : PLAY_SECONDS;
-  const horizon = name === 'end' ? HORIZON_END : HORIZON_PLAY;
-  for (let index = 0; index < limit / STEP; index += 1) {
-    if (world.step(STEP, autopilot(world.state, horizon), false) & EVENT_OVER) break;
-  }
-  const over = world.state.lives === 0;
-  return { screen: over ? SCREEN_OVER : SCREEN_PLAY, best: world.state.score };
+export function buildShotGame(search, opts = {}) {
+  const { shot, seed } = parseShotRequest(search);
+  if (!shot) return null;
+  const game = createGame(seed, opts);
+  stageShot(game, shot);
+  return { game, shot, seed };
+}
+
+export function markShotReady(win) {
+  if (win) win.__shotReady = true;
 }

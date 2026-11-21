@@ -1,53 +1,122 @@
-// Keyboard and pointer input. Held keys give a steering direction; one-shot presses (start or
-// restart, pause) are queued as bit flags and taken once by the loop, so a press between two
-// frames is never lost and never counted twice.
+// Aurelia Heat — keyboard and mouse input.
+// A single Input tracker owns every listener so the game loop can poll plain
+// state (held keys, mouse position, click edges) instead of handling events
+// in a dozen places. Edge-triggered actions (pause, dusk, interact) are
+// exposed through consume(), which reports each physical press exactly once.
 
-export const ACTION_CONFIRM = 1;
-export const ACTION_PAUSE = 2;
+const TRACKED_CODES = new Set([
+  'KeyW', 'KeyA', 'KeyS', 'KeyD',
+  'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
+  'ShiftLeft', 'ShiftRight', 'Space',
+  'KeyE', 'KeyM', 'KeyK', 'KeyL', 'KeyP', 'Escape', 'Enter',
+]);
 
-const LEFT = new Set(['ArrowLeft', 'KeyA']);
-const RIGHT = new Set(['ArrowRight', 'KeyD']);
-const CONFIRM = new Set(['Space', 'Enter']);
-const PAUSE = new Set(['KeyP', 'Escape']);
+export class Input {
+  constructor(target) {
+    this.keys = new Set();
+    this.pressed = new Set();
+    this.mouseX = 0;
+    this.mouseY = 0;
+    this.mouseDown = false;
+    this.clicked = false;
+    this.enabled = true;
+    this.target = target || null;
+    this._onKeyDown = (ev) => this.handleKeyDown(ev);
+    this._onKeyUp = (ev) => this.handleKeyUp(ev);
+    this._onMouseMove = (ev) => this.handleMouseMove(ev);
+    this._onMouseDown = (ev) => this.handleMouseDown(ev);
+    this._onMouseUp = () => { this.mouseDown = false; };
+    this._onBlur = () => { this.keys.clear(); this.mouseDown = false; };
+  }
 
-export function createInput(target) {
-  let left = false;
-  let right = false;
-  let actions = 0;
+  attach(canvas) {
+    if (typeof window === 'undefined') return;
+    window.addEventListener('keydown', this._onKeyDown);
+    window.addEventListener('keyup', this._onKeyUp);
+    window.addEventListener('blur', this._onBlur);
+    const el = canvas || window;
+    el.addEventListener('mousemove', this._onMouseMove);
+    el.addEventListener('mousedown', this._onMouseDown);
+    window.addEventListener('mouseup', this._onMouseUp);
+    this.target = el;
+  }
 
-  window.addEventListener('keydown', (event) => {
-    if (LEFT.has(event.code)) left = true;
-    else if (RIGHT.has(event.code)) right = true;
-    else if (CONFIRM.has(event.code)) {
-      if (!event.repeat) actions |= ACTION_CONFIRM;
-    } else if (PAUSE.has(event.code)) {
-      if (!event.repeat) actions |= ACTION_PAUSE;
-    } else return;
-    event.preventDefault();
-  });
-  window.addEventListener('keyup', (event) => {
-    if (LEFT.has(event.code)) left = false;
-    else if (RIGHT.has(event.code)) right = false;
-  });
-  // A key released while the tab is hidden never sends keyup: let go of everything on blur.
-  window.addEventListener('blur', () => {
-    left = false;
-    right = false;
-  });
-  target.addEventListener('pointerdown', () => {
-    actions |= ACTION_CONFIRM;
-  });
+  detach() {
+    if (typeof window === 'undefined') return;
+    window.removeEventListener('keydown', this._onKeyDown);
+    window.removeEventListener('keyup', this._onKeyUp);
+    window.removeEventListener('blur', this._onBlur);
+  }
 
-  return {
-    /** -1 for left, 1 for right, 0 for neither or both. */
-    direction() {
-      return (right ? 1 : 0) - (left ? 1 : 0);
-    },
-    /** The one-shot presses since the last call, as ACTION_* flags. */
-    takeActions() {
-      const taken = actions;
-      actions = 0;
-      return taken;
-    },
-  };
+  handleKeyDown(ev) {
+    if (!this.enabled) return;
+    if (TRACKED_CODES.has(ev.code)) {
+      if (ev.code.startsWith('Arrow') || ev.code === 'Space') ev.preventDefault?.();
+      if (!this.keys.has(ev.code)) this.pressed.add(ev.code);
+      this.keys.add(ev.code);
+    }
+  }
+
+  handleKeyUp(ev) {
+    this.keys.delete(ev.code);
+  }
+
+  handleMouseMove(ev) {
+    const rect = this.target && this.target.getBoundingClientRect ? this.target.getBoundingClientRect() : null;
+    if (rect) {
+      this.mouseX = ev.clientX - rect.left;
+      this.mouseY = ev.clientY - rect.top;
+    } else {
+      this.mouseX = ev.clientX || 0;
+      this.mouseY = ev.clientY || 0;
+    }
+  }
+
+  handleMouseDown(ev) {
+    if (!this.enabled) return;
+    this.mouseDown = true;
+    this.clicked = true;
+    this.handleMouseMove(ev);
+  }
+
+  down(code) {
+    return this.keys.has(code);
+  }
+
+  consume(code) {
+    if (this.pressed.has(code)) {
+      this.pressed.delete(code);
+      return true;
+    }
+    return false;
+  }
+
+  axisX() {
+    let x = 0;
+    if (this.down('KeyA') || this.down('ArrowLeft')) x -= 1;
+    if (this.down('KeyD') || this.down('ArrowRight')) x += 1;
+    return x;
+  }
+
+  axisY() {
+    let y = 0;
+    if (this.down('KeyW') || this.down('ArrowUp')) y -= 1;
+    if (this.down('KeyS') || this.down('ArrowDown')) y += 1;
+    return y;
+  }
+
+  sprintHeld() {
+    return this.down('ShiftLeft') || this.down('ShiftRight');
+  }
+
+  endFrame() {
+    this.pressed.clear();
+    this.clicked = false;
+  }
+}
+
+export function createStubInput() {
+  const input = new Input(null);
+  input.enabled = true;
+  return input;
 }
