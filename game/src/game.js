@@ -16,7 +16,7 @@ import {
   ROADBLOCK_MAX_AGE_SEC, ROADBLOCK_DESPAWN_DIST, ROADBLOCK_PASS_CLEAR,
 } from './config.js';
 import { createRng, clamp, dist, angleTo, turnToward, jitter } from './random.js';
-import { generateWorld, isOnRoad, circleHitsBuilding, placeById, ROAD_LINES, ROAD_HALF, snapToLane } from './world.js';
+import { generateWorld, isOnRoad, circleHitsBuilding, placeById, ROAD_LINES, ROAD_HALF, snapToLane, nearestRoadCoord, isJunction } from './world.js';
 import { MISSIONS, createMissionState, startMission, completionBanner, fareReward, fareBanner } from './missions.js';
 
 let NEXT_ID = 1;
@@ -291,15 +291,17 @@ export function deployRoadblock(game) {
   const cars = [];
   if (horizontal) {
     const dirSign = Math.cos(car.heading) >= 0 ? 1 : -1;
-    let roadY = null;
-    for (const line of ROAD_LINES) {
-      if (Math.abs(pos.y - line) <= ROAD_HALF) { roadY = line; break; }
-    }
-    if (roadY === null) return false;
+    // Snap the barrier to the avenue the player is actually driving on.
+    // nearestRoadCoord gives the closest centre-line; if the player is
+    // not inside that avenue's band there is no road to block, so bail
+    // exactly as the old hand-rolled scan did when it found no line.
+    const roadY = nearestRoadCoord(pos.y);
+    if (Math.abs(pos.y - roadY) > ROAD_HALF) return false;
     let bx = pos.x + dirSign * ROADBLOCK_AHEAD;
-    for (const line of ROAD_LINES) {
-      if (Math.abs(bx - line) < ROAD_HALF + 46) { bx += dirSign * 180; break; }
-    }
+    // Keep the barrier clear of the next junction: if the drop point
+    // lands within a junction's apron, push it one block further along
+    // the direction of travel so cross traffic keeps a way through.
+    if (isJunction(bx, pos.y, 46)) bx += dirSign * 180;
     bx = clamp(bx, 140, WORLD_SIZE - 140);
     if (Math.abs(bx - pos.x) < 380) return false;
     for (const off of [-40, 0, 40]) {
@@ -309,15 +311,13 @@ export function deployRoadblock(game) {
     game.roadblock = { x: bx, y: roadY, horizontal: true, dirSign, age: 0, cars };
   } else {
     const dirSign = Math.sin(car.heading) >= 0 ? 1 : -1;
-    let roadX = null;
-    for (const line of ROAD_LINES) {
-      if (Math.abs(pos.x - line) <= ROAD_HALF) { roadX = line; break; }
-    }
-    if (roadX === null) return false;
+    // Same snap-and-guard as the horizontal case, axes swapped: the
+    // barrier spans the vertical avenue the player is travelling on.
+    const roadX = nearestRoadCoord(pos.x);
+    if (Math.abs(pos.x - roadX) > ROAD_HALF) return false;
     let by = pos.y + dirSign * ROADBLOCK_AHEAD;
-    for (const line of ROAD_LINES) {
-      if (Math.abs(by - line) < ROAD_HALF + 46) { by += dirSign * 180; break; }
-    }
+    // Junction clearance, mirroring the horizontal branch.
+    if (isJunction(pos.x, by, 46)) by += dirSign * 180;
     by = clamp(by, 140, WORLD_SIZE - 140);
     if (Math.abs(by - pos.y) < 380) return false;
     for (const off of [-40, 0, 40]) {

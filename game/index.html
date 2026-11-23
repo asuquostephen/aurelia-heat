@@ -4,15 +4,76 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Aurelia Heat — Port Aurelia</title>
+<meta name="description" content="Aurelia Heat: a top-down open-world crime game set in Port Aurelia. Run jobs for fixer Marlo Venn, outrun the patrols and their roadblocks, and own the streets.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23123a5e'/%3E%3Ccircle cx='16' cy='16' r='9' fill='%23ffd23f'/%3E%3C/svg%3E">
 <style>
   html, body { margin: 0; padding: 0; background: #0a0f16; height: 100%; overflow: hidden; }
   body { display: flex; align-items: center; justify-content: center; }
   canvas { display: block; background: #123a5e; max-width: 100vw; max-height: 100vh; }
+  /* Visually hidden but available to screen readers and text browsers:
+     used for the controls-and-features summary below the canvas. */
+  .visually-hidden {
+    position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+    overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%);
+    white-space: nowrap; border: 0;
+  }
 </style>
 </head>
 <body>
 <canvas id="game" width="1280" height="720"></canvas>
+<section class="visually-hidden" aria-label="About Aurelia Heat and how to play">
+  <h1>Aurelia Heat</h1>
+  <p>
+    Aurelia Heat is a top-down open-world crime game set in Port Aurelia, a
+    coastal city of avenues, a central park and a harbour. You arrive with
+    empty pockets and one contact: Marlo Venn, a fixer who pays cash for
+    jobs. Complete six chained story jobs, run taxi fares in free roam, and
+    stay ahead of the patrols.
+  </p>
+  <h2>Moving and driving</h2>
+  <p>
+    Move on foot with W, A, S, D or the arrow keys, and hold Shift to
+    sprint. Press E next to any car to get in — or to steal it, if someone
+    is driving — and E again to get out. Cars drive with the same movement
+    keys; different classes have different top speeds and take hull damage
+    in collisions.
+  </p>
+  <h2>Jobs and earning</h2>
+  <p>
+    Press M to start Marlo's next job: reaching landmarks, delivering a
+    stolen coupe, beating a delivery clock, escaping a frame-up, clearing
+    rival crew gunmen, and a final three-bag collection downtown. Jobs pay
+    cash on completion. Between jobs, pick up pedestrians waving for a taxi
+    and drive them to their destination for a fare. Press L to toggle Dusk
+    Mode: jobs and fares pay a 25 percent bonus at dusk, and wanted heat
+    fades faster — but the city is darker.
+  </p>
+  <h2>Wanted level and roadblocks</h2>
+  <p>
+    Crimes raise your heat, shown as one to five wanted stars: carjacking,
+    theft, assault, gunfire, hit-and-runs and ramming patrol cars all count.
+    Patrol cars chase, ram, and corner you; if they pin you down, the bust
+    meter fills and you wake up at the clinic, fined. At three stars or
+    more, patrols also set up roadblocks — three police cars parked across
+    the avenue ahead of you. Ram through, swerve off-road, or turn back,
+    but do not stop in front of one. Heat only decays while no patrol can
+    see you, so break line of sight and stay hidden.
+  </p>
+  <h2>Combat and other keys</h2>
+  <p>
+    Aim with the mouse and click to fire your sidearm; press Space to
+    punch. Watch your health and ammunition on the heads-up display, and
+    collect health, ammo and cash pickups around the city. Press K to save
+    your progress, and P or Escape to pause — the game also pauses itself
+    if you switch to another tab.
+  </p>
+</section>
+<noscript>
+  <p>
+    Aurelia Heat needs JavaScript to run — the whole city is generated and
+    played in your browser. Enable JavaScript and reload to play.
+  </p>
+</noscript>
 <script type="module" src="./src/main.js"></script>
 </body>
 </html>

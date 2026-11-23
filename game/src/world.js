@@ -29,7 +29,12 @@ export const PLACE_DEFS = [
 const ROOF_PALETTES = ['#5b4a3f', '#6e5a4a', '#47525e', '#7a6a55', '#54423a', '#3f4a55', '#8a7a5f', '#5e5348'];
 const WALL_PALETTES = ['#c9b8a3', '#b7c2cc', '#d6c9a8', '#a8b8a4', '#cbb3a0', '#b0a6c2', '#d0d4d8', '#c2b280'];
 
-function nearestRoadCoord(v) {
+// nearestRoadCoord answers "which avenue centre-line is this coordinate
+// closest to?" for one axis. It is exported because the gameplay code needs
+// the same answer the lane-snapping code uses: roadblock deployment snaps
+// its barrier to the avenue the player is driving on, and doing that with
+// a second hand-rolled scan would invite the two to drift apart.
+export function nearestRoadCoord(v) {
   let best = ROAD_LINES[0];
   let bestD = Infinity;
   for (const line of ROAD_LINES) {
@@ -39,6 +44,29 @@ function nearestRoadCoord(v) {
   return best;
 }
 
+// isJunction reports whether a point sits where a vertical and a
+// horizontal avenue cross. A point qualifies when it lies within the road
+// band (ROAD_HALF, plus an optional caller-supplied pad) of one avenue on
+// each axis at the same time. Roadblock placement uses it with a pad to
+// keep barriers clear of crossings, where a wall of patrol cars would
+// block four approaches at once and read as a bug rather than a tactic.
+export function isJunction(x, y, pad = 0) {
+  const reach = ROAD_HALF + pad;
+  let nearVertical = false;
+  let nearHorizontal = false;
+  for (const line of ROAD_LINES) {
+    if (Math.abs(x - line) <= reach) nearVertical = true;
+    if (Math.abs(y - line) <= reach) nearHorizontal = true;
+    if (nearVertical && nearHorizontal) return true;
+  }
+  return false;
+}
+
+// isOnRoad is the coarse membership test the rest of the game polls every
+// frame: a point is on a road when either axis falls inside an avenue
+// band. Callers that need finer answers use the helpers above instead —
+// nearestRoadCoord for "which avenue", isJunction for "is this a
+// crossing" — rather than re-deriving them from this boolean.
 export function isOnRoad(x, y) {
   for (const line of ROAD_LINES) {
     if (Math.abs(x - line) <= ROAD_HALF) return true;

@@ -3,6 +3,8 @@
 // procedural audio unlocked on the first gesture, autosave on job and fare
 // completion (handled inside the sim) plus a manual K save. Screenshot
 // requests (?shot=...) are staged deterministically and flagged ready.
+// Hiding the tab mid-run auto-pauses (see the visibilitychange wiring
+// below), so an interrupted chase waits for the player instead of ending.
 
 import { createGame, update, enterNearestCar, shoot, punch, startNextMission, toggleDusk, saveToStorage, loadFromStorage } from './game.js';
 import { Input } from './input.js';
@@ -35,6 +37,22 @@ if (shotBuild) {
   game.mode = 'title';
 }
 if (game.dusk && audio.setDusk) audio.setDusk(true);
+
+// Auto-pause when the tab is hidden. A player who switches tabs mid-chase
+// — to answer a message, check a map, anything — should come back to the
+// moment they left, not to a busted screen and a hospital bill earned
+// while nobody was watching. The frame loop stops on its own in a hidden
+// tab, but the moment the page hides we also move a live run into the
+// same 'paused' mode the P key toggles, so the pause screen is what
+// greets the player on return and one keypress resumes. Only a run in
+// progress is touched: the title and story-complete screens have nothing
+// to lose by sitting hidden, and an already-paused game stays exactly
+// as the player left it.
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && game.mode === 'playing') {
+    game.mode = 'paused';
+  }
+});
 
 let lastTime = performance.now();
 let shotFrames = 0;

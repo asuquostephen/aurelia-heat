@@ -3,6 +3,9 @@
 // state (held keys, mouse position, click edges) instead of handling events
 // in a dozen places. Edge-triggered actions (pause, dusk, interact) are
 // exposed through consume(), which reports each physical press exactly once.
+// Focus loss is the one event the loop cannot poll its way out of, so the
+// tracker also resets itself on window blur via releaseAll(): a keyup that
+// happened in another window must never leave a key held here forever.
 
 const TRACKED_CODES = new Set([
   'KeyW', 'KeyA', 'KeyS', 'KeyD',
@@ -26,7 +29,26 @@ export class Input {
     this._onMouseMove = (ev) => this.handleMouseMove(ev);
     this._onMouseDown = (ev) => this.handleMouseDown(ev);
     this._onMouseUp = () => { this.mouseDown = false; };
-    this._onBlur = () => { this.keys.clear(); this.mouseDown = false; };
+    this._onBlur = () => this.releaseAll();
+  }
+
+  // releaseAll forgets every in-flight input at once: held keys, presses
+  // queued for consume(), the mouse button and a pending click edge.
+  //
+  // It exists for the window-blur case. When the player alt-tabs away (or
+  // the OS steals focus for a notification) while holding W, the keydown
+  // is recorded but the matching keyup fires in the other window and is
+  // never delivered here. Without a reset, the player comes back to a car
+  // that accelerates forever on a key nothing is holding — the classic
+  // stuck key. Clearing pending presses matters just as much: a Space
+  // queued the instant before the blur would otherwise land as a phantom
+  // punch on the first frame back. attach() wires blur to this method,
+  // and anything else that suspends play can call it directly.
+  releaseAll() {
+    this.keys.clear();
+    this.pressed.clear();
+    this.mouseDown = false;
+    this.clicked = false;
   }
 
   attach(canvas) {
