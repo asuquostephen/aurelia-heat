@@ -133,6 +133,13 @@ export class AudioEngine {
     this.burst(0.07, 0.3, 500);
   }
 
+  radioChirp() {
+    // Two short square beeps, like a patrol radio acknowledging the call
+    // to throw a roadblock across the avenue ahead.
+    this.tone(1180, 0.07, 'square', 0.18);
+    this.tone(1560, 0.09, 'square', 0.18, null, 0.09);
+  }
+
   setEngine(speedRatio, driving) {
     if (!this.ctx || !this.master) return;
     if (!driving) {
@@ -204,6 +211,7 @@ export function createStubAudio() {
     bustedFall: record('bustedFall'),
     wastedFall: record('wastedFall'),
     doorSlam: record('doorSlam'),
+    radioChirp: record('radioChirp'),
     setEngine: record('setEngine'),
     setSiren: record('setSiren'),
     stopLoops: record('stopLoops'),

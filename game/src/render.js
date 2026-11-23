@@ -1,5 +1,7 @@
 // Aurelia Heat — Canvas renderer: world, HUD, minimap and screens.
 // Everything is drawn with plain Canvas paths — no images, no fonts to load.
+// Police roadblocks need no new car art: their interceptors are ordinary
+// game.cars with light bars, and the minimap marks them with flashing dots.
 // Dusk Mode swaps the whole palette: the same draw calls run, but daylight
 // colours are lerped toward dusk tones, lamps gain a glow, and the sea and
 // sky bands deepen.
@@ -296,6 +298,14 @@ function drawMinimap(ctx, game, x, y, size) {
   ctx.fillStyle = '#2f7bff';
   for (const car of game.police) {
     ctx.beginPath(); ctx.arc(x + car.x * scale, y + car.y * scale, 3, 0, Math.PI * 2); ctx.fill();
+  }
+  // Roadblock interceptors flash on the minimap so a fleeing driver can
+  // spot the barrier line before it fills the windscreen.
+  if (game.roadblocks) {
+    ctx.fillStyle = Math.floor(game.time * 4) % 2 === 0 ? '#ff3b30' : '#ffd7d4';
+    for (const car of game.roadblocks) {
+      ctx.beginPath(); ctx.arc(x + car.x * scale, y + car.y * scale, 3.5, 0, Math.PI * 2); ctx.fill();
+    }
   }
   if (game.objectivePos) {
     ctx.fillStyle = '#ffcf3f';

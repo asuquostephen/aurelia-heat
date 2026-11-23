@@ -38,7 +38,13 @@ and a beach that runs down into open sea along the southern edge.
   intercept, flash their light bars, wail procedurally, and ram. If they
   corner you while you are slow or on foot, the BUST meter fills: a bust means
   fines and a wake-up at Aurelia Clinic. Heat only decays while no patrol can
-  see you, after a grace period, and faster the longer you stay hidden.
+  see you, after a grace period, and faster the longer you stay hidden. At
+  three stars and up, patrols also throw a roadblock of unmanned interceptors
+  across the avenue ahead of a fleeing driver — ram through at speed and the
+  cars shove aside (and it counts as ramming a patrol car), squeeze off-road
+  around it, turn back, or steal the middle car to open the barrier. The
+  roadblock crews keep eyes on you, so a roadblock also stops your heat
+  cooling and can bust a cornered driver.
 - **Combat.** Aim with the mouse and click to fire a sidearm with limited
   ammo, spread and tracer lines; Space punches. The Saltline Crew's gunmen
   advance and shoot back under their own health bars. Health, ammo and cash
@@ -97,6 +103,7 @@ Deterministic screenshot scenes are built in for captures:
 - `?shot=start&seed=1` — the title screen
 - `?shot=play&seed=1` — a three-star chase in Downtown Aurelia
 - `?shot=end&seed=1` — the story-complete screen
+- `?shot=roadblock&seed=1` — a four-star roadblock across a Downtown avenue
 
 Each staged scene sets `window.__shotReady` once it is drawn.
 

@@ -39,6 +39,18 @@ export const CRIME_HEAT = {
   property: 15,
 };
 
+// Police roadblocks: once the chase reaches three stars, patrols throw a
+// line of unmanned interceptors across the avenue ahead of a fleeing driver.
+// The barrier sits ROADBLOCK_AHEAD units up the road, lives at most
+// ROADBLOCK_MAX_AGE_SEC seconds, and despawns once the driver is far away
+// or has clearly passed the barrier plane.
+export const ROADBLOCK_MIN_STARS = 3;
+export const ROADBLOCK_AHEAD = 640;
+export const ROADBLOCK_COOLDOWN_SEC = 14;
+export const ROADBLOCK_MAX_AGE_SEC = 50;
+export const ROADBLOCK_DESPAWN_DIST = 1050;
+export const ROADBLOCK_PASS_CLEAR = 240;
+
 export const BUST_FILL_PER_SEC = 34;
 export const BUST_DRAIN_PER_SEC = 22;
 export const BUST_RADIUS = 120;

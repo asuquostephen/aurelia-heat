@@ -12,6 +12,8 @@ import {
   CRIME_HEAT, BUST_FILL_PER_SEC, BUST_DRAIN_PER_SEC, BUST_RADIUS,
   GUN_DAMAGE, GUN_RANGE, GUN_COOLDOWN, GUN_SPREAD, GUN_START_AMMO,
   ENEMY_DAMAGE, ENEMY_RANGE, SAVE_KEY, districtAt, starsForHeat, payoutWithDusk,
+  ROADBLOCK_MIN_STARS, ROADBLOCK_AHEAD, ROADBLOCK_COOLDOWN_SEC,
+  ROADBLOCK_MAX_AGE_SEC, ROADBLOCK_DESPAWN_DIST, ROADBLOCK_PASS_CLEAR,
 } from './config.js';
 import { createRng, clamp, dist, angleTo, turnToward, jitter } from './random.js';
 import { generateWorld, isOnRoad, circleHitsBuilding, placeById, ROAD_LINES, ROAD_HALF, snapToLane } from './world.js';
@@ -84,6 +86,7 @@ function makeCar(rng, x, y, heading, cls, opts = {}) {
     color: opts.color || cls.color,
     parked: !!opts.parked,
     isPolice: !!opts.isPolice,
+    roadblock: !!opts.roadblock,
     driver: opts.driver || null, // 'traffic' | 'police' | 'player' | null
     marked: !!opts.marked,
     turnCooldown: 0,
@@ -158,6 +161,9 @@ export function createGame(seed = 1, opts = {}) {
     dialogueTimer: 0,
     stats: { crimes: 0, shotsFired: 0, faresDone: 0, missionsDone: 0, busts: 0, wasted: 0, carsStolen: 0 },
     audio: opts.audio || null,
+    roadblocks: [],
+    roadblock: null,
+    roadblockCooldown: 0,
     lastCrime: null,
     objectiveText: 'Press M for your next job from Marlo',
     objectiveDist: null,
@@ -256,6 +262,100 @@ export function toggleDusk(game) {
   return game.dusk;
 }
 
+// --- Police roadblocks -----------------------------------------------------
+// A roadblock is three unmanned patrol interceptors parked nose-to-tail
+// across the player's avenue, placed ahead of a fast fleeing driver at three
+// stars or more. The cars live in game.cars so traffic braking, collisions
+// and the renderer all treat them like any other vehicle; the meta record
+// tracks the barrier plane so the lifecycle can tell when the driver has
+// rammed through, slipped past, or simply outrun the setup.
+
+export function clearRoadblock(game, cooldownSec) {
+  if (game.roadblock) {
+    const doomed = new Set(game.roadblock.cars);
+    game.cars = game.cars.filter((c) => !doomed.has(c));
+    game.roadblocks = game.roadblocks.filter((c) => !doomed.has(c));
+    game.roadblock = null;
+  }
+  if (typeof cooldownSec === 'number') game.roadblockCooldown = cooldownSec;
+}
+
+export function deployRoadblock(game) {
+  if (game.roadblock) return false;
+  const car = game.player.inCar;
+  if (!car) return false;
+  const pos = playerPos(game);
+  if (!isOnRoad(pos.x, pos.y)) return false;
+  const horizontal = Math.abs(Math.cos(car.heading)) >= Math.abs(Math.sin(car.heading));
+  const rng = game._rng;
+  const cars = [];
+  if (horizontal) {
+    const dirSign = Math.cos(car.heading) >= 0 ? 1 : -1;
+    let roadY = null;
+    for (const line of ROAD_LINES) {
+      if (Math.abs(pos.y - line) <= ROAD_HALF) { roadY = line; break; }
+    }
+    if (roadY === null) return false;
+    let bx = pos.x + dirSign * ROADBLOCK_AHEAD;
+    for (const line of ROAD_LINES) {
+      if (Math.abs(bx - line) < ROAD_HALF + 46) { bx += dirSign * 180; break; }
+    }
+    bx = clamp(bx, 140, WORLD_SIZE - 140);
+    if (Math.abs(bx - pos.x) < 380) return false;
+    for (const off of [-40, 0, 40]) {
+      const rc = makeCar(rng, bx, roadY + off, Math.PI / 2 + jitter(0.12), POLICE_CLASS, { parked: true, isPolice: true, roadblock: true, driver: null });
+      cars.push(rc);
+    }
+    game.roadblock = { x: bx, y: roadY, horizontal: true, dirSign, age: 0, cars };
+  } else {
+    const dirSign = Math.sin(car.heading) >= 0 ? 1 : -1;
+    let roadX = null;
+    for (const line of ROAD_LINES) {
+      if (Math.abs(pos.x - line) <= ROAD_HALF) { roadX = line; break; }
+    }
+    if (roadX === null) return false;
+    let by = pos.y + dirSign * ROADBLOCK_AHEAD;
+    for (const line of ROAD_LINES) {
+      if (Math.abs(by - line) < ROAD_HALF + 46) { by += dirSign * 180; break; }
+    }
+    by = clamp(by, 140, WORLD_SIZE - 140);
+    if (Math.abs(by - pos.y) < 380) return false;
+    for (const off of [-40, 0, 40]) {
+      const rc = makeCar(rng, roadX + off, by, jitter(0.12), POLICE_CLASS, { parked: true, isPolice: true, roadblock: true, driver: null });
+      cars.push(rc);
+    }
+    game.roadblock = { x: roadX, y: by, horizontal: false, dirSign, age: 0, cars };
+  }
+  for (const rc of cars) {
+    game.cars.push(rc);
+    game.roadblocks.push(rc);
+  }
+  setBanner(game, 'Police roadblock ahead — ram through, swerve off-road, or turn back', 4);
+  if (game.audio && game.audio.radioChirp) game.audio.radioChirp();
+  return true;
+}
+
+export function updateRoadblocks(game, dt) {
+  game.roadblockCooldown = Math.max(0, game.roadblockCooldown - dt);
+  const pos = playerPos(game);
+  if (!game.roadblock) {
+    const car = game.player.inCar;
+    if (starsOf(game) >= ROADBLOCK_MIN_STARS && car && Math.abs(car.speed) > 60 && game.roadblockCooldown <= 0) {
+      if (!deployRoadblock(game)) game.roadblockCooldown = 3;
+    }
+    return;
+  }
+  const meta = game.roadblock;
+  meta.age += dt;
+  const d = dist(pos.x, pos.y, meta.x, meta.y);
+  let passed = false;
+  if (meta.horizontal) passed = (pos.x - meta.x) * meta.dirSign > ROADBLOCK_PASS_CLEAR;
+  else passed = (pos.y - meta.y) * meta.dirSign > ROADBLOCK_PASS_CLEAR;
+  if (starsOf(game) < ROADBLOCK_MIN_STARS || d > ROADBLOCK_DESPAWN_DIST || meta.age > ROADBLOCK_MAX_AGE_SEC || passed) {
+    clearRoadblock(game, ROADBLOCK_COOLDOWN_SEC);
+  }
+}
+
 export function nearestCar(game, maxDist = CAR_ENTER_RANGE) {
   let best = null;
   let bestD = maxDist;
@@ -285,6 +385,19 @@ export function enterNearestCar(game) {
   } else if (car.parked) {
     addHeat(game, 'theft');
     game.stats.carsStolen += 1;
+  }
+  // Stealing a roadblock interceptor pulls it out of the barrier: taking
+  // the middle car opens a gap the driver can slip through afterwards.
+  if (car.roadblock) {
+    car.roadblock = false;
+    game.roadblocks = game.roadblocks.filter((c) => c !== car);
+    if (game.roadblock) {
+      game.roadblock.cars = game.roadblock.cars.filter((c) => c !== car);
+      if (game.roadblock.cars.length === 0) {
+        game.roadblock = null;
+        game.roadblockCooldown = ROADBLOCK_COOLDOWN_SEC;
+      }
+    }
   }
   car.driver = 'player';
   car.parked = false;
@@ -554,6 +667,13 @@ export function hospitalRespawn(game, reason) {
   game.heat = 0;
   game.bust = 0;
   game.police = [];
+  // A bust or a hospital trip ends the roadblock: its cars leave the world.
+  if (game.roadblocks && game.roadblocks.length) {
+    const doomed = new Set(game.roadblocks);
+    game.cars = game.cars.filter((c) => !doomed.has(c));
+  }
+  game.roadblocks = [];
+  game.roadblock = null;
   game.bullets = [];
   game.fare = null;
   if (reason === 'wasted') {
@@ -630,16 +750,32 @@ function updatePlayerCar(game, input, dt) {
   driveCar(game, car, throttle, steer, dt);
   game.player.x = car.x;
   game.player.y = car.y;
-  // Car versus car.
+  // Car versus car. Roadblock interceptors are unmanned and light enough
+  // to shove aside at speed: a fast ram knocks the barrier car sideways and
+  // costs the driver less momentum than a head-on stop, while a slow grind
+  // just crumples both hulls without fresh heat.
   for (const other of [...game.cars, ...game.police]) {
     if (other === car) continue;
     if (dist(car.x, car.y, other.x, other.y) < 46) {
       damageCar(game, car, 4);
       damageCar(game, other, 4);
-      if (other.isPolice) addHeat(game, 'ramPatrol');
       if (game.audio && game.audio.crash) game.audio.crash(0.5);
-      car.speed *= 0.55;
-      other.speed *= 0.4;
+      if (other.roadblock) {
+        const dx = other.x - car.x;
+        const dy = other.y - car.y;
+        const len = Math.sqrt(dx * dx + dy * dy) || 1;
+        const speedAbs = Math.abs(car.speed);
+        const shove = clamp((speedAbs - 50) * 0.09, 0, 26);
+        other.x += (dx / len) * shove;
+        other.y += (dy / len) * shove;
+        other.heading += shove * 0.012 * (Math.random() < 0.5 ? -1 : 1);
+        if (speedAbs > 90) addHeat(game, 'ramPatrol');
+        car.speed *= speedAbs > 200 ? 0.8 : 0.45;
+      } else {
+        if (other.isPolice) addHeat(game, 'ramPatrol');
+        car.speed *= 0.55;
+        other.speed *= 0.4;
+      }
     }
   }
   // Running down pedestrians is a serious crime.
@@ -811,6 +947,18 @@ function updatePolice(game, dt) {
       car.speed *= 0.6;
     }
   }
+  // Roadblock crews keep eyes on the barrier even though their cars are
+  // unmanned: being watched by a roadblock counts as being seen, so heat
+  // stops cooling and a cornered driver can still be busted at the barrier.
+  for (const rc of game.roadblocks || []) {
+    const d = dist(pos.x, pos.y, rc.x, rc.y);
+    if (nearest === null || d < nearest) nearest = d;
+    if (d < 380) {
+      anySee = true;
+      game.lastSeen.x = pos.x;
+      game.lastSeen.y = pos.y;
+    }
+  }
   game.seenByPolice = anySee;
   if (game.audio && game.audio.setSiren) game.audio.setSiren(game.police.length ? nearest : null);
   // Heat decay: only while unseen, after a grace period, faster the longer
@@ -937,6 +1085,7 @@ export function update(game, input, dt) {
   updateTraffic(game, step);
   updatePeds(game, step);
   updatePolice(game, step);
+  updateRoadblocks(game, step);
   updateGunmen(game, step);
   updateBullets(game, step);
   updatePickups(game);

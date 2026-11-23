@@ -6,8 +6,8 @@
 // When staging finishes, window.__shotReady is set so the harness can wait
 // for a fully drawn frame instead of guessing with sleeps alone.
 
-import { createGame, startNextMission, setBanner, playerPos } from './game.js';
-import { placeById } from './world.js';
+import { createGame, startNextMission, setBanner, playerPos, deployRoadblock } from './game.js';
+import { placeById, ROAD_LINES } from './world.js';
 
 export function parseShotRequest(search) {
   const params = new URLSearchParams(search || '');
@@ -15,7 +15,7 @@ export function parseShotRequest(search) {
   const seedRaw = params.get('seed');
   const seed = seedRaw === null ? 1 : Number(seedRaw);
   return {
-    shot: shot === 'start' || shot === 'play' || shot === 'end' ? shot : null,
+    shot: shot === 'start' || shot === 'play' || shot === 'end' || shot === 'roadblock' ? shot : null,
     seed: Number.isFinite(seed) ? seed : 1,
   };
 }
@@ -59,8 +59,6 @@ export function stageShot(game, shot) {
     game.dusk = false;
     // Two patrol cars closing in behind, one crossing ahead.
     game.police = [];
-    const { spawnShotPolice } = { spawnShotPolice: null };
-    void spawnShotPolice;
     // Build patrol cars from the traffic pool shape via direct objects that
     // match the car record the renderer and sim already understand.
     const offsets = [[-190, 90, 0.2], [-260, -70, 0.5], [210, -120, 2.8]];
@@ -78,6 +76,38 @@ export function stageShot(game, shot) {
     setBanner(game, 'Marlo: "Three stars, kid — lose them!"', 30);
     game.dialogue = null;
     game.banner = 'WANTED — patrols closing in on Downtown Aurelia';
+    game.bannerTimer = 30;
+    game.time = 5;
+    void playerPos(game);
+    return game;
+  }
+  if (shot === 'roadblock') {
+    game.mode = 'playing';
+    const tower = placeById(game.world, 'tower');
+    // Stage the fleeing coupe squarely on the avenue band through Downtown
+    // near the tower, heading east along the road, so the roadblock deploy
+    // finds a clean road line ahead of the driver.
+    const roadY = ROAD_LINES.reduce((best, line) => (Math.abs(line - tower.y) < Math.abs(best - tower.y) ? line : best), ROAD_LINES[0]);
+    const coupe = game.cars.find((c) => c.classId === 'coupe') || game.cars[0];
+    coupe.x = tower.x - 260;
+    coupe.y = roadY;
+    coupe.heading = 0;
+    coupe.speed = 300;
+    coupe.parked = false;
+    coupe.driver = 'player';
+    coupe.hull = coupe.hullMax * 0.8;
+    coupe.smoke = 0.2;
+    game.player.inCar = coupe;
+    game.player.x = coupe.x;
+    game.player.y = coupe.y;
+    game.player.cash = 2140;
+    game.player.ammo = 26;
+    game.player.health = 84;
+    game.heat = 340; // four stars
+    game.dusk = false;
+    game.police = [];
+    deployRoadblock(game);
+    game.banner = 'ROADBLOCK — Downtown Aurelia';
     game.bannerTimer = 30;
     game.time = 5;
     void playerPos(game);
